@@ -1,9 +1,10 @@
+-- BodyBlock Rayfield Full Loadstring
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 
--- Remote Event
+-- đảm bảo RemoteEvent tồn tại
 local SetBodyBlockSettings = ReplicatedStorage:FindFirstChild("SetBodyBlockSettings")
 if not SetBodyBlockSettings then
     SetBodyBlockSettings = Instance.new("RemoteEvent")
@@ -11,24 +12,31 @@ if not SetBodyBlockSettings then
     SetBodyBlockSettings.Parent = ReplicatedStorage
 end
 
-local BodyBlockActivate = ReplicatedStorage:WaitForChild("BodyBlockActivate")
+local BodyBlockActivate = ReplicatedStorage:FindFirstChild("BodyBlockActivate")
+if not BodyBlockActivate then
+    BodyBlockActivate = Instance.new("RemoteEvent")
+    BodyBlockActivate.Name = "BodyBlockActivate"
+    BodyBlockActivate.Parent = ReplicatedStorage
+end
 
 -- Load Rayfield
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/Rayfield.lua"))()
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/Rayfield.lua"))()
+end)
+if not success or not Rayfield then
+    warn("❌ Rayfield failed to load")
+    return
+end
 
--- state
+-- State
 local autoEnabled = false
 local currentRange = 4
 local AIM_DURATION = 0.24
 local AIM_STEP = 0.12
 
 local function sendSettings()
-    local payload = {
-        autoEnabled = autoEnabled and true or false,
-        range = tonumber(currentRange) or 4
-    }
-    if payload.range < 1 then payload.range = 1 end
-    if payload.range > 10 then payload.range = 10 end
+    local payload = {autoEnabled = autoEnabled, range = tonumber(currentRange) or 4}
+    payload.range = math.clamp(payload.range,1,10)
     pcall(function() SetBodyBlockSettings:FireServer(payload) end)
 end
 
@@ -39,8 +47,7 @@ local function smoothFaceTarget(rootPart, targetPos, duration)
     while elapsed < duration and rootPart.Parent do
         local fromC = rootPart.CFrame
         local toC = CFrame.new(rootPart.Position, Vector3.new(targetPos.X, rootPart.Position.Y, targetPos.Z))
-        local alpha = math.clamp(elapsed / duration, 0, 1)
-        rootPart.CFrame = fromC:Lerp(toC, alpha)
+        rootPart.CFrame = fromC:Lerp(toC, elapsed/duration)
         elapsed = elapsed + AIM_STEP
         task.wait(AIM_STEP)
     end
@@ -49,49 +56,48 @@ local function smoothFaceTarget(rootPart, targetPos, duration)
     end
 end
 
--- BodyBlock GUI
-local Window = Rayfield:CreateWindow({
-    Name = "Body Block (007n7)",
-    LoadingTitle = "Body Block Rayfield GUI",
-    LoadingSubtitle = "v1.0",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "BodyBlockConfig",
-        FileName = "Settings"
-    }
-})
+-- Create GUI
+task.spawn(function()
+    local Window = Rayfield:CreateWindow({
+        Name = "Body Block (007n7)",
+        LoadingTitle = "Body Block Rayfield GUI",
+        LoadingSubtitle = "v1.0",
+        ConfigurationSaving = {Enabled=true, FolderName="BodyBlockConfig", FileName="Settings"},
+        Discord={Enabled=false}
+    })
 
-local Tab = Window:CreateTab("Auto BodyBlock", 4483362458)
+    local Tab = Window:CreateTab("Auto BodyBlock",4483362458)
 
-Tab:CreateToggle({
-    Name = "Enable Auto BodyBlock",
-    CurrentValue = autoEnabled,
-    Flag = "AutoBodyBlockToggle",
-    Callback = function(value)
-        autoEnabled = value
-        sendSettings()
-    end
-})
+    Tab:CreateToggle({
+        Name="Enable Auto BodyBlock",
+        CurrentValue=autoEnabled,
+        Flag="AutoBodyBlockToggle",
+        Callback=function(value)
+            autoEnabled = value
+            sendSettings()
+        end
+    })
 
-Tab:CreateSlider({
-    Name = "Custom Range (studs)",
-    Range = {1,10},
-    Increment = 1,
-    Suffix = "studs",
-    CurrentValue = currentRange,
-    Flag = "RangeSlider",
-    Callback = function(value)
-        currentRange = value
-        sendSettings()
-    end
-})
+    Tab:CreateSlider({
+        Name="Custom Range (studs)",
+        Range={1,10},
+        Increment=1,
+        Suffix="studs",
+        CurrentValue=currentRange,
+        Flag="RangeSlider",
+        Callback=function(value)
+            currentRange = value
+            sendSettings()
+        end
+    })
 
-Tab:CreateButton({
-    Name = "Apply Settings",
-    Callback = function()
-        sendSettings()
-    end
-})
+    Tab:CreateButton({
+        Name="Apply Settings",
+        Callback=function()
+            sendSettings()
+        end
+    })
+end)
 
 -- BodyBlock event client-side
 BodyBlockActivate.OnClientEvent:Connect(function(attackerUserId)
@@ -114,10 +120,10 @@ BodyBlockActivate.OnClientEvent:Connect(function(attackerUserId)
         local ok, track = pcall(function() return humanoid:LoadAnimation(anim) end)
         if ok and track then
             pcall(function() track:Play() end)
-            delay(1.6, function() pcall(function() track:Stop() end) end)
+            delay(1.6,function() pcall(function() track:Stop() end) end)
         end
     end
 end)
 
--- gửi lần đầu khi load
+-- Gửi setting lần đầu khi load
 sendSettings()
